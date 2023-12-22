@@ -713,19 +713,6 @@ int main()
 	ReadAuthorityFiles();
 
 	GetEpisodes();
-	//GetEpisodeResources();
-
-	/*試験用*/
-	//DownloadFilesInManifestFile("character/103454/", "Character", 1);
-	//DownloadFilesInManifestFile("memorial/", "Memoria", 1);
-	//DownloadFilesInManifestFile("adv/text/cabin/adultr/", "Cabin", 3);
-	//DownloadNonAdvResource(CreateWorkFolder("Thumbnail").c_str(), "gallery/episode/600730.png", nullptr);
-
-	//std::wstring wstr = CreateAuthorisation("POST", "https://tonofura-web-r.deepone-online.com/deep-one/api/story/readStory");
-	//printf_s("%S\r\n", wstr.c_str());
-
-	//RequestResourcePathList(401000614);
-
-	//RequestReadStory(10010301);
+	GetEpisodeResources();
 
 }
