@@ -8,23 +8,24 @@
 
 std::string GetFolderBasePath();
 std::string CreateWorkFolder(const char* folder_name);
-std::string CreateNestedWorkFolder(std::string strRelativePath);
-std::string CreateFolderBasedOnRelativeUrl(std::string strUrl, std::string strBaseFolder, int iDepth, bool bBeFilePath);
+std::string CreateNestedWorkFolder(const std::string& strRelativePath);
+std::string CreateFolderBasedOnRelativeUrl(const std::string& strUrl, const std::string& strBaseFolder, int iDepth, bool bBeFilePath);
 
 char* LoadExistingFile(const char* file_path);
-bool SaveNullTerminatedStringToFile(char* data, const char* file_path);
 void SaveStringToFile(std::string data, const char* file_path);
 bool DoesFilePathExist(const char* file_path);
 
 /*ìdéqñ‘ån*/
 
 bool SaveInternetResourceToFile(const char* url, const char* folder, const char* file_name, unsigned long nMinFileSize, bool bFolderCreation);
+bool LoadInternetResourceToBuffer(const char* url, char** dst, unsigned long* ulSize);
 
 /*ï∂éöóÒëÄçÏån*/
 
-bool ExtractJsonObject(char* src, const char* name, char** dst);
-bool ExtractJsonArray(char* src, const char* name, char** dst);
-bool GetJsonElementValue(char* src, const char* name, char* dst, size_t dst_size);
+bool ExtractJsonObject(char** src, const char* name, char** dst);
+bool ExtractJsonArray(char** src, const char* name, char** dst);
+bool GetJsonElementValue(char* src, const char* name, char* dst, size_t nDstSize);
+bool ReadUpToJsonNameEnd(char** src, const char* name, char* value = nullptr, size_t nValueSize = 0);
 
 std::wstring WidenUtf8(std::string str);
 std::string NarrowUtf8(std::wstring wstr);

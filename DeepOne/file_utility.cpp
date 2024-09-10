@@ -57,7 +57,7 @@ std::string CreateWorkFolder(const char* folder_name)
 	return strFolder;
 }
 /*入れ子作業フォルダ作成*/
-std::string CreateNestedWorkFolder(std::string strRelativePath)
+std::string CreateNestedWorkFolder(const std::string& strRelativePath)
 {
 	if (!strRelativePath.empty())
 	{
@@ -75,7 +75,7 @@ std::string CreateNestedWorkFolder(std::string strRelativePath)
 
 			strFolder += strRelativePath.substr(nRead, nPos) + "\\/";
 			::CreateDirectoryA(strFolder.c_str(), nullptr);
-			nRead += nPos + 3;
+			nRead += nPos + 1;
 		}
 
 		return strFolder;
@@ -84,7 +84,7 @@ std::string CreateNestedWorkFolder(std::string strRelativePath)
 	return std::string();
 }
 /*相対URLを元にフォルダ作成*/
-std::string CreateFolderBasedOnRelativeUrl(std::string strUrl, std::string strBaseFolder, int iDepth, bool bBeFilePath)
+std::string CreateFolderBasedOnRelativeUrl(const std::string& strUrl, const std::string& strBaseFolder, int iDepth, bool bBeFilePath)
 {
 	if (!strUrl.empty())
 	{
@@ -147,42 +147,6 @@ char* LoadExistingFile(const char* file_path)
 	}
 
 	return nullptr;
-}
-/*NULL終端文字列のファイル出力*/
-bool SaveNullTerminatedStringToFile(char* data, const char* file_path)
-{
-	BOOL iRet = 0;
-
-	if (file_path != nullptr)
-	{
-		if (!::PathFileExistsA(file_path))
-		{
-			HANDLE hFile = ::CreateFileA(file_path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-			if (hFile != INVALID_HANDLE_VALUE)
-			{
-				::SetFilePointer(hFile, NULL, nullptr, FILE_END);
-
-				DWORD bytesWrite = 0;
-				iRet = ::WriteFile(hFile, data, static_cast<DWORD>(strlen(data)), &bytesWrite, nullptr);
-				if (iRet)
-				{
-					WriteMessage(std::string(file_path).append(" success").c_str());
-					return true;
-				}
-				else
-				{
-					WriteMessage(std::string(file_path).append(" failed").c_str());
-				}
-				::CloseHandle(hFile);
-			}
-		}
-		else
-		{
-			WriteMessage(std::string(file_path).append(" already exists.").c_str());
-		}
-
-	}
-	return iRet > 0;
 }
 /*メモリのファイル出力*/
 bool WriteStringToFile(std::string data, const char* file_path)
@@ -326,23 +290,70 @@ bool SaveInternetResourceToFile(const char* url, const char* folder, const char*
 
 	return false;
 }
+/*電子網資源のメモリ展開*/
+bool LoadInternetResourceToBuffer(const char* url, char** dst, unsigned long* ulSize)
+{
+	if (url == nullptr || *dst != nullptr)return false;
 
-/*JSON特性値の抽出*/
-bool ExtractJsonObject(char* src, const char* name, char** dst)
+	ComInit init;
+	CComPtr<IStream> pStream;
+	HRESULT hr = ::URLOpenBlockingStreamA(nullptr, url, &pStream, 0, nullptr);
+
+	if (hr == S_OK)
+	{
+		STATSTG stat;
+		hr = pStream->Stat(&stat, STATFLAG_DEFAULT);
+		if (hr == S_OK)
+		{
+			char* buffer = static_cast<char*>(malloc(stat.cbSize.LowPart + 1LL));
+			if (buffer != nullptr)
+			{
+				DWORD dwReadBytes = 0;
+				DWORD dwSize = 0;
+				for (;;)
+				{
+					hr = pStream->Read(buffer + dwSize, stat.cbSize.LowPart - dwSize, &dwReadBytes);
+					if (FAILED(hr))break;
+					dwSize += dwReadBytes;
+					if (dwSize >= stat.cbSize.LowPart)break;
+				}
+				*(buffer + dwSize) = '\0';
+				*ulSize = dwSize;
+				*dst = buffer;
+
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/*JSON特性体の抽出*/
+bool ExtractJsonObject(char** src, const char* name, char** dst)
 {
 	char* p = nullptr;
-	char* pp = src;
+	char* pp = *src;
 	char* q = nullptr;
 	char* qq = nullptr;
-	size_t len = 0;
+	size_t nLen = 0;
 	int iCount = 0;
 
-	p = strstr(pp, name);
-	if (p == nullptr)return false;
+	if (name != nullptr)
+	{
+		p = strstr(pp, name);
+		if (p == nullptr)return false;
 
-	pp = strchr(p, ':');
-	if (pp == nullptr)return false;
-	++pp;
+		pp = strchr(p, ':');
+		if (pp == nullptr)return false;
+	}
+	else
+	{
+		p = strchr(pp, '{');
+		if (p == nullptr)return false;
+		++iCount;
+		pp = p + 1;
+	}
 
 	for (;;)
 	{
@@ -366,32 +377,51 @@ bool ExtractJsonObject(char* src, const char* name, char** dst)
 		if (iCount == 0)break;
 	}
 
-	len = q - p + 1;
-	char* buffer = static_cast<char*>(malloc(len + 1));
-	if (buffer == nullptr)return false;
-	memcpy(buffer, p, len);
-	*(buffer + len) = '\0';
-	*dst = buffer;
+	for (; iCount > 0; ++q)
+	{
+		if (*q == '}')
+		{
+			--iCount;
+		}
+	}
+	++q;
+
+	nLen = q - p;
+	char* pBuffer = static_cast<char*>(malloc(nLen + 1));
+	if (pBuffer == nullptr)return false;
+
+	memcpy(pBuffer, p, nLen);
+	*(pBuffer + nLen) = '\0';
+	*dst = pBuffer;
+	*src = q;
 
 	return true;
-
 }
 /*JSON配列の抽出*/
-bool ExtractJsonArray(char* src, const char* name, char** dst)
+bool ExtractJsonArray(char** src, const char* name, char** dst)
 {
 	char* p = nullptr;
-	char* pp = src;
+	char* pp = *src;
 	char* q = nullptr;
 	char* qq = nullptr;
-	size_t len = 0;
+	size_t nLen = 0;
 	int iCount = 0;
 
-	p = strstr(pp, name);
-	if (p == nullptr)return false;
+	if (name != nullptr)
+	{
+		p = strstr(pp, name);
+		if (p == nullptr)return false;
 
-	pp = strchr(p, ':');
-	if (pp == nullptr)return false;
-	++pp;
+		pp = strchr(p, ':');
+		if (pp == nullptr)return false;
+	}
+	else
+	{
+		p = strchr(pp, '[');
+		if (p == nullptr)return false;
+		++iCount;
+		pp = p + 1;
+	}
 
 	for (;;)
 	{
@@ -415,49 +445,47 @@ bool ExtractJsonArray(char* src, const char* name, char** dst)
 		if (iCount == 0)break;
 	}
 
-	len = q - p + 1;
-	char* buffer = static_cast<char*>(malloc(len + 1));
-	if (buffer == nullptr)return false;
-	memcpy(buffer, p, len);
-	*(buffer + len) = '\0';
-	*dst = buffer;
+	for (; iCount > 0; ++q)
+	{
+		if (*q == ']')
+		{
+			--iCount;
+		}
+	}
+	++q;
+
+	nLen = q - p;
+	char* pBuffer = static_cast<char*>(malloc(nLen + 1));
+	if (pBuffer == nullptr)return false;
+
+	memcpy(pBuffer, p, nLen);
+	*(pBuffer + nLen) = '\0';
+	*dst = pBuffer;
+	*src = q;
 
 	return true;
 }
 /*JSON区切り位置探索*/
-char* FindJsonDataEnd(char* src)
+char* FindJsonValueEnd(char* src)
 {
-	const char ref[] = " ,]}\"";
-
-	for (char* pp = src; pp != nullptr; ++pp)
-	{
-		for (size_t i = 0; i < sizeof(ref); ++i)
-		{
-			if (*pp == ref[i])
-			{
-				return pp;
-			}
-		}
-	}
-
-	return nullptr;
+	const char ref[] = ",}\"]";
+	return strpbrk(src, ref);
 }
 /*JSON要素の値を取得*/
-bool GetJsonElementValue(char* src, const char* name, char* dst, size_t dst_size)
+bool GetJsonElementValue(char* src, const char* name, char* dst, size_t nDstSize)
 {
 	char* p = nullptr;
 	char* pp = src;
-	size_t len = 0;
+	size_t nLen = 0;
 
 	p = strstr(pp, name);
 	if (p == nullptr)return false;
-	p += strlen(name);
 
 	pp = strchr(p, ':');
 	if (pp == nullptr)return false;
 	++pp;
 
-	p = FindJsonDataEnd(pp);
+	p = FindJsonValueEnd(pp);
 	if (p == nullptr)return false;
 	if (*p == '"')
 	{
@@ -466,10 +494,64 @@ bool GetJsonElementValue(char* src, const char* name, char* dst, size_t dst_size
 		if (p == nullptr)return false;
 	}
 
-	len = p - pp;
-	if (len > dst_size)return false;
-	memcpy(dst, pp, len);
-	*(dst + len) = '\0';
+	nLen = p - pp;
+	if (nLen > nDstSize - 1)return false;
+	memcpy(dst, pp, nLen);
+	*(dst + nLen) = '\0';
+
+	return true;
+}
+/*JSON変数名開始位置探索*/
+char* FindJsonNameStart(char* src)
+{
+	const char ref[] = " :{[,";
+	for (char* p = src; p != nullptr; ++p)
+	{
+		bool b = false;
+		/*終端除外*/
+		for (size_t i = 0; i < sizeof(ref) - 1; ++i)
+		{
+			if (*p == ref[i])
+			{
+				b = true;
+			}
+		}
+		if (!b)return p;
+	}
+
+	return nullptr;
+}
+/*名称終わり位置まで読み進め*/
+bool ReadUpToJsonNameEnd(char** src, const char* name, char* value, size_t nValueSize)
+{
+	char* p = nullptr;
+	char* pp = *src;
+
+	if (name != nullptr)
+	{
+		p = strstr(pp, name);
+		if (p == nullptr)return false;
+	}
+	else
+	{
+		p = FindJsonNameStart(pp);
+		if (p == nullptr)return false;
+		++p;
+	}
+
+	pp = FindJsonValueEnd(p);
+	if (pp == nullptr)return false;
+
+	/*名称取得*/
+	if (name == nullptr && value != nullptr && nValueSize != 0)
+	{
+		size_t nLen = pp - p;
+		if (nLen > nValueSize - 1)return false;
+		memcpy(value, p, nLen);
+		*(value + nLen) = '\0';
+	}
+
+	*src = *pp == '"' ? pp + 1 : pp;
 
 	return true;
 }
@@ -579,10 +661,12 @@ std::string GetExtensionFromFileName(const char* file_name)
 	if (file_name != nullptr)
 	{
 		std::string strFile = file_name;
-		size_t pos = strFile.find_last_of(".");
-		if (pos != std::string::npos)
+		size_t nPos = strFile.rfind('/');
+		nPos = nPos != std::string::npos ? nPos + 1 : 0;
+		nPos = strFile.find('.', nPos);
+		if (nPos != std::string::npos)
 		{
-			return strFile.substr(pos);
+			return strFile.substr(nPos);
 		}
 	}
 	return std::string();

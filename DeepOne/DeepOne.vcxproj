@@ -127,7 +127,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="DeepOne.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="file_utility.cpp" />
     <ClCompile Include="md5.cpp" />
     <ClCompile Include="sha256.cpp" />
